@@ -1,0 +1,19 @@
+# Optional: self-hosted Hindsight. Hindsight Cloud is the easier path (see README).
+# Note: Groq's FREE tier is too small for Hindsight's own retain calls (~64k tokens);
+# use a paid Groq key here, or switch provider (e.g. HINDSIGHT_API_LLM_PROVIDER=openai).
+#   GROQ_API_KEY=gsk_... docker compose up hindsight
+# API on :8888, Hindsight UI on :9999 (handy on-screen during the demo).
+services:
+  hindsight:
+    image: ghcr.io/vectorize-io/hindsight:latest
+    ports:
+      - "8888:8888"
+      - "9999:9999"
+    environment:
+      HINDSIGHT_API_LLM_PROVIDER: groq
+      HINDSIGHT_API_LLM_API_KEY: ${GROQ_API_KEY}
+      HINDSIGHT_API_LLM_MODEL: openai/gpt-oss-120b
+    volumes:
+      - hindsight-data:/home/hindsight/.pg0
+volumes:
+  hindsight-data:
