@@ -17,17 +17,20 @@ class Settings:
     llm_api_key: str | None
     llm_model: str
     offline: bool
-    company: str = "SunKiran Solar"
-    city: str = "Hyderabad"
+    parser: str  # "llm" or "rules"
+    company: str = "Sri Venkateswara Agencies"
+    city: str = "Secunderabad, Hyderabad"
 
     @classmethod
     def from_env(cls) -> "Settings":
+        llm_key = os.getenv("LLM_API_KEY") or os.getenv("GROQ_API_KEY") or None
         return cls(
             hindsight_url=os.getenv("HINDSIGHT_URL", "https://api.hindsight.vectorize.io"),
             hindsight_api_key=os.getenv("HINDSIGHT_API_KEY") or None,
-            bank_id=os.getenv("PAKKA_BANK_ID", "sunkiran-solar"),
+            bank_id=os.getenv("MUNSHI_BANK_ID", "sri-venkateswara-agencies"),
             llm_base_url=os.getenv("LLM_BASE_URL", "https://api.groq.com/openai/v1"),
-            llm_api_key=os.getenv("LLM_API_KEY") or os.getenv("GROQ_API_KEY") or None,
+            llm_api_key=llm_key,
             llm_model=os.getenv("LLM_MODEL", "openai/gpt-oss-120b"),
-            offline=os.getenv("PAKKA_OFFLINE", "0").lower() in {"1", "true", "yes"},
+            offline=os.getenv("MUNSHI_OFFLINE", "0").lower() in {"1", "true", "yes"},
+            parser=os.getenv("MUNSHI_PARSER", "llm" if llm_key else "rules"),
         )

@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Munshi · Order desk</title>
+  <meta name="description" content="A WhatsApp order desk that learns every retailer's language, built on Hindsight agent memory.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230E6E5C'/%3E%3Cpath d='M9 9h14M9 14h14M9 19h9' stroke='white' stroke-width='2.4' stroke-linecap='round'/%3E%3Ccircle cx='22' cy='21' r='3' fill='%23F2B33D'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header class="appbar">
+  <div class="brand">
+    <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8"/><path d="M9 9h14M9 14h14M9 19h9"/><circle cx="22" cy="21" r="3"/></svg>
+    <div>
+      <div class="brand-name">Munshi</div>
+      <div class="brand-sub" id="company">Order desk</div>
+    </div>
+  </div>
+
+  <nav class="tabs" role="tablist" aria-label="Views">
+    <button role="tab" data-view="inbox" aria-selected="true">Inbox <span class="count" id="new-count"></span></button>
+    <button role="tab" data-view="learning" aria-selected="false">Learning curve</button>
+    <button role="tab" data-view="retailers" aria-selected="false">Retailers</button>
+    <button role="tab" data-view="ask" aria-selected="false">Ask Munshi</button>
+  </nav>
+
+  <div class="appbar-right">
+    <div class="memory-switch" role="group" aria-label="Memory">
+      <span class="ms-label">Memory</span>
+      <button id="mem-on" class="ms-opt on" aria-pressed="true">On</button>
+      <button id="mem-off" class="ms-opt" aria-pressed="false">Off</button>
+    </div>
+    <span class="conn" id="conn" title="Memory backend"><span class="dot"></span><span id="conn-text">…</span></span>
+  </div>
+</header>
+
+<!-- ============================================================ INBOX -->
+<main id="view-inbox" class="view inbox-view">
+  <aside class="pane list-pane">
+    <div class="pane-h">
+      <h2>WhatsApp orders</h2>
+      <button class="btn ghost sm" id="new-msg-btn" title="Simulate an incoming WhatsApp order">+ New</button>
+    </div>
+    <ul id="inbox" class="inbox-list" aria-label="Incoming orders"></ul>
+    <div class="pane-f muted xs"><kbd>↑</kbd><kbd>↓</kbd> move · <kbd>M</kbd> memory · <kbd>⌘</kbd><kbd>↵</kbd> confirm</div>
+  </aside>
+
+  <section class="pane work-pane" id="work">
+    <div class="empty-state">
+      <div class="es-icon">🧾</div>
+      <h3>Pick an order on the left</h3>
+      <p>Munshi reads the message, checks what it remembers about that shop, and fills in the order. You only fix what it isn't sure about.</p>
+    </div>
+  </section>
+
+  <aside class="pane memory-pane" id="memory-pane">
+    <div class="pane-h"><h2>What Munshi remembers</h2></div>
+    <div class="mp-body muted small">Select an order to see this retailer's memory.</div>
+  </aside>
+</main>
+
+<!-- ============================================================ LEARNING -->
+<main id="view-learning" class="view learning-view" hidden>
+  <div class="page">
+    <div class="page-h">
+      <div>
+        <h1>Does it actually learn?</h1>
+        <p class="lede">Eight weeks of real-shaped WhatsApp orders from ten kirana stores, replayed in date order. Each week Munshi sees only what it has learned so far. The same messages are also run with memory switched off.</p>
+      </div>
+      <div class="replay-box">
+        <button class="btn" id="run-replay">Run replay</button>
+        <div class="progress" id="replay-progress" hidden><div class="bar"><span></span></div><div class="xs muted" id="replay-text"></div></div>
+      </div>
+    </div>
+
+    <div class="kpis" id="kpis"></div>
+
+    <section class="card chart-card">
+      <div class="card-h">
+        <div>
+          <h2 id="chart-title">Order lines auto-accepted correctly</h2>
+          <p class="xs muted" id="chart-sub">Share of each week's lines Munshi filled in with the right product and quantity and did not need the operator for.</p>
+        </div>
+        <div class="seg" role="group" aria-label="Metric">
+          <button class="seg-opt on" data-metric="auto_rate">Lines</button>
+          <button class="seg-opt" data-metric="touchless_rate">Whole orders</button>
+          <button class="seg-opt" data-metric="table">Table</button>
+        </div>
+      </div>
+      <div class="viz-root" id="chart"></div>
+      <div class="legend" id="legend"></div>
+      <p class="xs muted" id="curve-meta"></p>
+    </section>
+
+    <section class="card how">
+      <h2>What's being measured</h2>
+      <div class="how-grid">
+        <div><b>Auto-accepted</b><p>Munshi filled the line in and marked it safe to post, with the right SKU and quantity.</p></div>
+        <div><b>Wrong auto-accept</b><p>Marked safe but wrong. This is the number that must stay at zero, because a wrong order costs a customer.</p></div>
+        <div><b>The trust gate</b><p>A shop's nickname auto-accepts only after the operator has confirmed it <b>twice</b>. Until then Munshi pre-fills it and asks.</p></div>
+        <div><b>Without memory</b><p>Same parser, same item master, same gate. The only thing missing is Hindsight.</p></div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<!-- ============================================================ RETAILERS -->
+<main id="view-retailers" class="view retailers-view" hidden>
+  <aside class="pane list-pane">
+    <div class="pane-h"><h2>Retailers</h2></div>
+    <ul id="retailer-list" class="inbox-list"></ul>
+  </aside>
+  <section class="pane" id="retailer-detail">
+    <div class="empty-state"><div class="es-icon">🏪</div><h3>Pick a retailer</h3><p>See every nickname Munshi has learned for that shop, how sure it is, and the dictionary Hindsight keeps up to date.</p></div>
+  </section>
+</main>
+
+<!-- ============================================================ ASK -->
+<main id="view-ask" class="view ask-view" hidden>
+  <div class="page narrow">
+    <div class="page-h">
+      <div>
+        <h1>Ask the order desk</h1>
+        <p class="lede">Questions go to Hindsight <code>reflect</code> over everything Munshi has retained. Answers name the shops, phrases and dates behind them.</p>
+      </div>
+      <button class="btn ghost" id="insights-btn">What needs attention?</button>
+    </div>
+    <div id="insights" class="insights"></div>
+    <form id="ask-form" class="ask-form">
+      <input name="q" placeholder="e.g. What does “blue wala” mean for each shop?" autocomplete="off" required>
+      <button class="btn">Ask</button>
+    </form>
+    <div class="chips" id="ask-chips"></div>
+    <div id="answers" class="answers"></div>
+  </div>
+</main>
+
+<!-- ============================================================ MODALS -->
+<div class="modal" id="new-msg-modal" hidden>
+  <form class="modal-card" id="new-msg-form">
+    <h3>Simulate an incoming WhatsApp order</h3>
+    <label>From<select name="retailer_id" id="nm-retailer"></select></label>
+    <label>Message<textarea name="text" rows="5" required placeholder="blue wala 2 cartoon, tel 1 cartoon"></textarea></label>
+    <div class="chips" id="nm-examples"></div>
+    <div class="modal-actions"><button type="button" class="btn ghost" data-close>Cancel</button><button class="btn">Add to inbox</button></div>
+  </form>
+</div>
+
+<div class="picker" id="picker" hidden>
+  <input id="picker-q" placeholder="Search product or code…" autocomplete="off">
+  <ul id="picker-list"></ul>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>

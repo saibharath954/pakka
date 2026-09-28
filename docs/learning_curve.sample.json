@@ -1,0 +1,204 @@
+{
+  "generated_at": "2026-09-28T23:21:35+05:30",
+  "mode": "offline",
+  "parser": "rules",
+  "gate": "nickname auto-accepts after 2 confirmations",
+  "with_memory": [
+    {
+      "week": 1,
+      "lines": 55,
+      "auto_correct": 17,
+      "auto_wrong": 0,
+      "touched": 38,
+      "touchless": 0,
+      "messages": 12,
+      "auto_rate": 0.3091,
+      "touchless_rate": 0.0
+    },
+    {
+      "week": 2,
+      "lines": 54,
+      "auto_correct": 25,
+      "auto_wrong": 0,
+      "touched": 29,
+      "touchless": 3,
+      "messages": 12,
+      "auto_rate": 0.463,
+      "touchless_rate": 0.25
+    },
+    {
+      "week": 3,
+      "lines": 53,
+      "auto_correct": 41,
+      "auto_wrong": 0,
+      "touched": 12,
+      "touchless": 5,
+      "messages": 12,
+      "auto_rate": 0.7736,
+      "touchless_rate": 0.4167
+    },
+    {
+      "week": 4,
+      "lines": 45,
+      "auto_correct": 37,
+      "auto_wrong": 0,
+      "touched": 8,
+      "touchless": 5,
+      "messages": 12,
+      "auto_rate": 0.8222,
+      "touchless_rate": 0.4167
+    },
+    {
+      "week": 5,
+      "lines": 56,
+      "auto_correct": 53,
+      "auto_wrong": 0,
+      "touched": 3,
+      "touchless": 9,
+      "messages": 12,
+      "auto_rate": 0.9464,
+      "touchless_rate": 0.75
+    },
+    {
+      "week": 6,
+      "lines": 52,
+      "auto_correct": 50,
+      "auto_wrong": 0,
+      "touched": 2,
+      "touchless": 10,
+      "messages": 12,
+      "auto_rate": 0.9615,
+      "touchless_rate": 0.8333
+    },
+    {
+      "week": 7,
+      "lines": 50,
+      "auto_correct": 48,
+      "auto_wrong": 0,
+      "touched": 2,
+      "touchless": 10,
+      "messages": 12,
+      "auto_rate": 0.96,
+      "touchless_rate": 0.8333
+    },
+    {
+      "week": 8,
+      "lines": 52,
+      "auto_correct": 51,
+      "auto_wrong": 0,
+      "touched": 1,
+      "touchless": 11,
+      "messages": 12,
+      "auto_rate": 0.9808,
+      "touchless_rate": 0.9167
+    }
+  ],
+  "without_memory": [
+    {
+      "week": 1,
+      "lines": 55,
+      "auto_correct": 17,
+      "auto_wrong": 0,
+      "touched": 38,
+      "touchless": 0,
+      "messages": 12,
+      "auto_rate": 0.3091,
+      "touchless_rate": 0.0
+    },
+    {
+      "week": 2,
+      "lines": 54,
+      "auto_correct": 10,
+      "auto_wrong": 2,
+      "touched": 42,
+      "touchless": 0,
+      "messages": 12,
+      "auto_rate": 0.1852,
+      "touchless_rate": 0.0
+    },
+    {
+      "week": 3,
+      "lines": 53,
+      "auto_correct": 11,
+      "auto_wrong": 1,
+      "touched": 41,
+      "touchless": 0,
+      "messages": 12,
+      "auto_rate": 0.2075,
+      "touchless_rate": 0.0
+    },
+    {
+      "week": 4,
+      "lines": 45,
+      "auto_correct": 3,
+      "auto_wrong": 1,
+      "touched": 41,
+      "touchless": 0,
+      "messages": 12,
+      "auto_rate": 0.0667,
+      "touchless_rate": 0.0
+    },
+    {
+      "week": 5,
+      "lines": 56,
+      "auto_correct": 9,
+      "auto_wrong": 1,
+      "touched": 46,
+      "touchless": 0,
+      "messages": 12,
+      "auto_rate": 0.1607,
+      "touchless_rate": 0.0
+    },
+    {
+      "week": 6,
+      "lines": 52,
+      "auto_correct": 9,
+      "auto_wrong": 2,
+      "touched": 41,
+      "touchless": 1,
+      "messages": 12,
+      "auto_rate": 0.1731,
+      "touchless_rate": 0.0833
+    },
+    {
+      "week": 7,
+      "lines": 50,
+      "auto_correct": 10,
+      "auto_wrong": 1,
+      "touched": 39,
+      "touchless": 0,
+      "messages": 12,
+      "auto_rate": 0.2,
+      "touchless_rate": 0.0
+    },
+    {
+      "week": 8,
+      "lines": 52,
+      "auto_correct": 12,
+      "auto_wrong": 1,
+      "touched": 39,
+      "touchless": 0,
+      "messages": 12,
+      "auto_rate": 0.2308,
+      "touchless_rate": 0.0
+    }
+  ],
+  "totals": {
+    "with_memory": {
+      "lines": 417,
+      "auto_correct": 322,
+      "auto_wrong": 0,
+      "touched": 95,
+      "touchless": 53,
+      "messages": 96
+    },
+    "without_memory": {
+      "lines": 417,
+      "auto_correct": 81,
+      "auto_wrong": 9,
+      "touched": 327,
+      "touchless": 1,
+      "messages": 96
+    }
+  }
+}

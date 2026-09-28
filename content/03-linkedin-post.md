@@ -1,33 +1,32 @@
-# LinkedIn post (Prompt 3)
+# LinkedIn post
 
-Paste the text between the lines. Put the article URL in the FIRST COMMENT (per the guide), and add the Hindsight link as a second comment. The repo link goes in the post body.
+Put the article URL in the **first comment**. Put the Hindsight link in the **second comment**. The repo link goes in the post body.
 
 ---
 
-My sales agent's first draft offered a discount.
-That exact message had already lost us a deal.
+"Blue wala 2 cartoon" means Surf Excel to one kirana shop.
+To the shop down the road, it means Lay's.
 
-The model wasn't dumb. It was stateless.
+No LLM can read that from the message. It's memory.
 
-So I gave it Hindsight agent memory:
+So I built Munshi, a WhatsApp order desk on Hindsight agent memory:
 
-→ retain every WhatsApp chat AND every outcome ("subsidy proof → replied")
-→ one bank, tags per lead, any_strict so leads never leak
-→ recall this lead + what worked on similar leads
-→ a mental model rewrites the sales playbook after each outcome
+→ every confirmed order is retained, tagged per shop
+→ strict-tag recall, so shops never leak into each other
+→ a nickname auto-accepts only after 2 confirmations
+→ "same as last time" = time-window recall of the last order
 
-Before: "special discount, shall I send the quote?"
-After: no price before survey, RWA template attached, citing 3 past leads
+Replayed 8 weeks of orders:
+Lines auto-accepted: 31% → 98%
+Wrong auto-accepts: 0 (9 without memory)
 
-No rule was hand-written. It learned them.
-
-Code: [REPO LINK]
+Code: https://github.com/saibharath954/pakka
 
 #AIAgents #AgentMemory #Hindsight #LLM
 
 ---
 
-Character count check: keep under 800 (currently ~690 with a ~40-char repo URL).
+About 690 characters (limit 800).
 
 ## First comment
 Full write-up: [ARTICLE LINK]
@@ -35,4 +34,4 @@ Full write-up: [ARTICLE LINK]
 ## Second comment
 Try Hindsight here: https://github.com/vectorize-io/hindsight
 
-Tag Code.in in the post or comments if you used it, per the guide.
+Tag Code.in if you used it.

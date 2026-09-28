@@ -1,144 +1,115 @@
-# I gave my sales agent Hindsight memory. It stopped discounting.
+# "Blue wala" means Surf to one shop, chips to another
 
-The first draft my follow-up agent wrote for an apartment owner in Hyderabad was *"Hi Suresh, we have a special discount this week, 3kW starts at ₹1.9 lakh, shall I send the quotation?"* It's a perfectly reasonable message. It's also exactly the message that had already lost us a deal three weeks earlier.
+Sharma Kirana in Ameerpet sends *"blue wala 2 cartoon"*. That means two cases of Surf Excel Easy Wash. Sai Ram Kirana in LB Nagar sends *"blue wala 2 box"*. That means two cases of Lay's Magic Masala. Same two words, different products, and nothing in either message tells you which.
 
-The model wasn't the problem. It had no way of knowing that. This post is about what changed when I gave it a memory, specifically [Hindsight, an open-source agent memory system](https://github.com/vectorize-io/hindsight), and about which design decisions mattered more than I expected.
+At a Hyderabad FMCG distributor, the only thing that resolves this is a person: the order-desk clerk who has read every WhatsApp message from every shop for years. I built **Munshi** to be that clerk's memory. This post is about how I did it with [Hindsight, an open-source agent memory system](https://github.com/vectorize-io/hindsight), and how I measured whether it actually learns instead of just asserting that it does.
 
-## The problem: sales knowledge lives in WhatsApp threads
+## The problem is memory, not language
 
-In India, small businesses sell over WhatsApp. Take a rooftop-solar installer in Hyderabad. Leads come from IndiaMART, JustDial, and Instagram ads. Three reps work maybe 150 open leads, and the real CRM is a pile of chat threads.
+Small distributors in India take most retail orders over WhatsApp. The messages look like this:
 
-Everything important is in those threads:
+```
+Bhai order likho
+blue wala 2 cartoon
+tel 1 cartoon
+chota parle 1 cartoon
+shaam tak chahiye
+```
 
-- Srinivas in Miyapur won't commit because his neighbour waited five months for the PM Surya Ghar subsidy.
-- Lakshmi Devi garu reads Telugu, not long English messages, and her son in Bangalore makes the money decisions.
-- Rahul in Gachibowli can't install anything until his residents' welfare association (RWA) approves use of the terrace.
-- Kiran in LB Nagar said "call me after two weeks, my daughter's wedding is on". Nobody did, and he signed with a competitor.
+A good LLM can split that into lines and quantities, and it knows "cartoon" means carton. What it can't know is that for this shop, "tel" (oil) means Freedom sunflower oil 1L pouches, not Fortune or Gold Drop. Or that "chota parle" means the ₹5 Parle-G pack, not the 250g one. That knowledge lives in the shop's history, not in the message. A stateless model can only guess. Guessing at an order desk means wrong deliveries, returns and an annoyed retailer.
 
-None of this fits in a CRM field. And none of it reaches an LLM that's asked to "write a follow-up for Suresh Varma".
+US distributors pay real money to solve this for email and PDF orders. The whole category is built around per-customer cross-references that "live in one veteran's head". The Indian WhatsApp version is messier (Hinglish, Telugu-English, voice-note transcripts), and it's mostly still done by hand into Tally.
 
-So I built **Pakka**. It retains every conversation and every follow-up outcome, and before it drafts anything it recalls what it knows. The part I care most about: it learns *which approaches work for which kind of lead*, without me writing those rules.
-
-## How it hangs together
+## How Munshi works
 
 ![Architecture](../docs/architecture.png)
 
-The stack is deliberately boring: FastAPI, a static HTML page, [Hindsight](https://hindsight.vectorize.io/) for memory, and Groq's `gpt-oss-120b` for drafting. There is one memory bank per company. The CRM row (name, phone, segment, status) sits in a JSON file, because that's spreadsheet data. Anything *learned* goes into Hindsight.
+Every message goes through the same five steps:
 
-The agent has four jobs:
+1. **Recall** what Hindsight knows about *this shop*, strictly scoped by tag.
+2. **Parse** the message into `(phrase, qty, unit)` lines. The LLM does this, and a rule parser takes over if the LLM misbehaves.
+3. **Resolve** each phrase from *evidence*: confirmations recalled from memory, or an unambiguous match in the item master.
+4. The operator fixes whatever Munshi isn't sure about, and confirms.
+5. The confirmed order, plus one fact per nickname, is **retained**, and the next message benefits.
 
-1. **Retain** each conversation and each outcome ("sent the subsidy proof → replied").
-2. **Brief** a rep before a call, using `reflect` over that lead's memories only.
-3. **Draft** the next follow-up from this lead's history, what happened with similar leads, and the team playbook.
-4. **Surface promises** that are due, like "call after 6pm today" or "the Monday after the RWA vote".
+Step 5 is the entire learning loop. There is no alias table anywhere in the code.
 
-## The core decision: one bank, many tags
+## One bank, strict tags
 
-My first instinct was a bank per lead. That's clean isolation, but it's useless for the question that matters most: *what worked on other apartment leads?* Cross-lead learning is the whole point.
-
-So there's one bank, and every memory is tagged at retain time:
-
-```python
-def _tags(self, row, kind, extra=None):
-    return [f"lead:{row['id']}", f"segment:{row['segment']}", f"kind:{kind}", *(extra or [])]
-
-async def log_outcome(self, lead_id, approach, result, text, when=None, refresh=True):
-    row = self.crm.get(lead_id)
-    content = (f"Follow-up outcome for {row['name']} ({SEGMENT_LABELS[row['segment']]}, {row['locality']}). "
-               f"Approach tried: {approach.replace('_', ' ')}. Result: {result}. {text}")
-    tags = self._tags(row, "outcome", [f"approach:{approach}", f"result:{result}"])
-    await self.memory.retain(content, tags=tags, when=when or self.clock(), ...)
-```
-
-When drafting, the agent runs two recalls in parallel with different tag scopes. One is strictly this lead. The other is outcomes across all leads, ranked by how similar the situation is:
+Every memory is tagged with the retailer, and lookups use Hindsight's strict tag matching. That's what lets "blue wala" mean Surf for one shop and Lay's for another without any cross-talk:
 
 ```python
-lead_mem, playbook_mem, pb = await asyncio.gather(
-    self.memory.recall(
-        f"Everything about {row['name']}: family and decision makers, language, objections, promises, ...",
-        tags=[f"lead:{lead_id}"], max_tokens=1500, now=now),
-    self.memory.recall(
-        f"Which follow-up approaches worked or failed with {segment} leads and leads with similar "
-        f"objections to {row['name']}? {row.get('last_message') or ''}",
-        tags=["kind:outcome"], max_tokens=2000, now=now),
-    self.memory.playbook(),
-)
+memories = await self.memory.recall(
+    f"{r.name} ({r.id}) order phrases: {text}",
+    tags=[f"retailer:{rid}"], max_tokens=4000, now=now)
 ```
 
-One detail worth knowing before you start: Hindsight's default tag matching (`any`) *includes untagged memories*. That's sensible for a general bank, but wrong when "everything about Suresh" must never contain facts about Rahul. The fix is `tags_match="any_strict"`. If you scope memory by tags, read that part of the docs twice.
+Under the hood this is `tags_match="any_strict"`. The default (`any`) also returns untagged memories, which is fine for a general assistant and wrong for per-customer vocabulary.
 
-Hindsight's recall runs semantic, keyword (BM25), graph and temporal retrieval in parallel, and reranks the merged results. So the second query finds Neha's and Rahul's outcomes for Suresh without me hand-writing a "similar leads" function. I didn't have to build a retrieval pipeline. I just had to retain the right things with the right tags.
-
-## The playbook nobody writes
-
-Recall gives you facts. What I actually wanted was the thing a senior sales manager carries around in their head: *discounts don't move independent-house owners who are scared about the subsidy; proof of recent subsidy credits does.*
-
-Hindsight has two features that fit this almost exactly. **Observations** are consolidated, evidence-backed beliefs built from many raw facts. When new evidence arrives, an observation gets refined rather than overwritten. **Mental models** are standing questions whose answers Hindsight keeps rewriting in the background. Pakka creates one at startup:
+When the operator confirms an order, each nickname line becomes one small, explicit fact:
 
 ```python
-await self.client.acreate_mental_model(
-    self.bank_id,
-    id=PLAYBOOK_ID,
-    name="Sales playbook: what actually closes",
-    source_query=PLAYBOOK_QUERY,  # "which approaches got replies or conversions ... by segment and objection"
-    max_tokens=1200,
-    trigger={"refresh_after_consolidation": True},
-)
+return (f'Order-desk confirmation: {r.name} ({r.id}) wrote "{phrase}" '
+        f"and it meant {sku} ({name}). Date {when:%Y-%m-%d}.")
 ```
 
-That's the entire learning loop. Log an outcome, Hindsight consolidates it into observations, and the playbook gets rewritten. Reading the playbook afterwards is a database read, not an LLM call, so it costs nothing to include in every draft.
+If the operator *changed* Munshi's suggestion, the fact records the correction as well ("Munshi suggested SURF-EW-1K, but the operator confirmed it meant SURF-QW-1K"). Corrections are the most valuable thing an order desk produces, and most systems throw them away.
 
-To show this, the demo replays eight weeks of sales history (40 events across 13 leads) in two stages. After the first two weeks the playbook is thin: a couple of ignored discounts and one reply to a subsidy explanation. After all eight weeks it has segment-level rules. Apartments need the RWA NOC template before any price. Commercial buyers get a payback calculation, not the residential subsidy brochure. Salaried couples reply after 7pm. Never miss a promised callback date. None of those rules appear anywhere in my code or prompts. I seeded plain conversations and results, and Hindsight found the patterns.
+## The evidence gate
 
-## Before and after, same lead
+This is the decision I'd defend hardest. **A nickname only auto-accepts after it has been confirmed twice for that shop.** Seen once, Munshi pre-fills it and asks. Seen twice, it just does it. If memory disagrees with itself, the line goes to a human.
 
-Suresh Varma lives in an apartment in Nallagandla. His IndiaMART message: *"What is price for 3kW? Is subsidy there for flats? Please send quotation fast, comparing 3 vendors."*
-
-**Without memory** (the model sees the CRM row and his message, like any WhatsApp bot would): it quotes a price and offers a discount, to be sent now.
-
-**With Hindsight memory**, the draft:
-
-- does **not** quote a per-watt price, citing that Neha Kapoor ghosted after an early quote and was lost on price;
-- attaches the RWA NOC template and offers to present at his society meeting, citing that Priya Nair's society approved in three weeks after exactly that;
-- mentions the group-housing subsidy for common areas, which came up in Rahul Mehta's RWA presentation.
-
-Every claim in the reasoning cites a memory id like `[P3]`, and the UI shows the underlying memory. When a rep asks "why is it not just sending the price?", the answer is on screen with dates.
-
-Two other moments made memory feel real rather than decorative:
-
-- **Padma Reddy** was referred by Lakshmi Devi. Her draft comes out in Telugu, suggests looping in her daughter, and leads with subsidy proof. That combination worked for Lakshmi Devi. Her CRM row has no language field. The preference comes from memory.
-- **Due now** is a single `reflect` call with a JSON schema. It lists Mohammed Irfan ("call back today after 6pm") and Rahul Mehta ("the Monday after the committee vote"). The vote date was *updated* in a later message, and reflect used the newer date.
-
-## Decisions that mattered more than I expected
-
-**No function calling.** The obvious design gives the agent `recall` and `retain` as tools and lets it decide when to use them. With open-weight models on a fast provider, tool calling is the least reliable part of the stack: malformed calls, skipped recalls, retries. So I used plain Python orchestration instead. The code decides what to recall, and the model gets one prompt and returns one JSON object:
+To count confirmations honestly, I don't parse Hindsight's extracted facts, which are paraphrased. I ask recall for the **raw chunks** as well (`include_chunks=True`) and count distinct retained documents:
 
 ```python
-for attempt in range(3):
-    kwargs = {"model": self.model, "messages": messages, "temperature": 0.4}
-    if attempt == 0:
-        kwargs["response_format"] = {"type": "json_object"}
-    try:
-        resp = await self.client.chat.completions.create(**kwargs)
-        return extract_json(resp.choices[0].message.content or "")
-    except Exception as err:
-        ...
+for m in memories:
+    key = m.document_id or m.raw
+    if key in seen:
+        continue
+    for match in _CONFIRM_RE.finditer(m.raw):
+        seen.add(key)
+        ph, code = norm(match.group("phrase")), match.group("code")
+        ev = out[ph].setdefault(code, Evidence(code, 0))
+        ev.confirmations += 1
 ```
 
-The memory decisions don't need to be agentic. They need to be correct every time.
+So the LLM reads the message, but it never decides what's safe to post. Evidence does. An LLM guess, however confident, is shown to the operator as a guess.
 
-**A fair baseline.** A "no memory" agent that sees nothing at all is a strawman. Pakka's baseline sees the lead's last message, which is exactly what a real WhatsApp bot has. The comparison is only interesting if the only difference is the memory.
+## "Same as last time"
 
-**Relative dates in seed data.** Hard-coded dates in the history would make the "due today" callback two weeks overdue a week later. Every event is an offset from today, so temporal recall behaves the same whenever you run it.
+Shops send *"same as last time, plus tel 1 cartoon extra"*, or a voice note that transcribes to *"usual list pampandi"*. Munshi recalls the shop's most recent confirmed order inside a 35-day window using Hindsight's `temporal_window`, rebuilds those lines, and adds the extra. Without memory, "same as last time" is literally unanswerable. The UI shows it as unknown, which is the honest answer.
 
-## Lessons if you're adding memory to an agent
+## Memory that writes its own documentation
 
-1. **Retain outcomes, not just conversations.** Conversations tell the agent about a customer. Outcomes ("approach X → ignored") are what let it learn. If you only retain chat logs, you have a very expensive search box.
-2. **Scope with tags, and use the strict variants.** One bank plus tags gets you per-entity isolation *and* cross-entity learning. `any_strict` stops untagged memories from leaking into scoped queries.
-3. **Let the memory system hold the rules.** A mental model that refreshes after consolidation replaced the playbook I would otherwise have written into a prompt, and that prompt would have been wrong by next month.
-4. **Make memory visible.** Citing memory ids in drafts builds trust with the people using the tool, and it's the fastest way to debug bad recalls.
-5. **Keep orchestration boring.** Deterministic retain/recall around a JSON-only LLM call beat an agent loop on reliability, latency and cost.
+For each shop, Munshi creates a Hindsight **mental model**: a standing question ("what phrases does this shop use, and what do they mean?") scoped to that shop's tag, with `refresh_after_consolidation=True`. Hindsight rewrites the answer in the background as new orders consolidate into observations. The operator sees it as the shop's *ordering dictionary*. It's the thing the veteran clerk carries in their head, except anyone can read it, and it updates itself.
 
-If you want to understand the model behind this, Vectorize's explainer on [what agent memory is](https://vectorize.io/what-is-agent-memory) is a good start. The [Hindsight docs](https://hindsight.vectorize.io/) cover retain, recall, reflect and mental models in detail. Pakka's code is on GitHub: **[link to your repo]**.
+## Did it actually learn?
 
-The discount message never got sent. The RWA template did.
+I didn't want to claim a learning curve. I wanted to measure one. So Munshi ships with a replay harness: eight weeks of orders (96 messages, 417 order lines, ten shops), processed in date order. Each week Munshi only knows what it has learned so far, and a simulated operator confirms the correct order after every message. The same messages also run with memory off: same parser, same item master, same gate.
+
+![Learning curve](../docs/learning-curve.png)
+
+| | Week 1 | Week 4 | Week 8 | Wrong auto-accepts |
+|---|---|---|---|---|
+| With memory | 31% | 82% | **98%** | **0** |
+| Without memory | 31% | 7% | 23% | 9 |
+
+*(Bundled run with the offline memory stand-in; `scripts/replay.py` produces the same measurement against a live Hindsight bank.)*
+
+The second column is the one I care about. Without memory, the agent auto-accepted nine wrong lines. They were all the same failure, on "same as last time, plus … extra" orders. On "usual list, plus 12 packets boost extra", a stateless agent confidently posts 12 Boost, when the shop's usual order already includes 6. The right answer is 18. The message looked complete; the missing context was in the shop's history. With memory plus the gate, Munshi got faster *and* never auto-accepted a wrong line. By week 8, 11 of 12 orders go straight through with zero operator touches.
+
+The before/after on a single message is the moment that makes the point in a demo. Sai Ram Kirana's *"blue wala 2 box, green wala 1 box, kurkure 1 box"* with memory off is two unknowns and a guess. With memory on, it's Lay's Magic Masala (confirmed 5 times), Cream & Onion flagged as "seen once, check it", and Kurkure (confirmed 8 times).
+
+![Memory off](../docs/inbox-memory-off.png)
+
+## What I'd tell anyone adding memory to an agent
+
+1. **Retain decisions, not just conversations.** The facts that teach Munshi are the operator's confirmations and corrections. Chat logs alone would give it an expensive search box.
+2. **Scope with tags, and use the strict variants.** One Hindsight bank plus strict tags gives you per-customer isolation and a single place to ask cross-customer questions ("who is overdue?").
+3. **Gate on evidence, not confidence.** Counting independent confirmations from the raw retained text is boring and deterministic, and it's why the wrong-accept count stays at zero.
+4. **Measure the curve.** A replay with memory on and off, scored against gold labels, turns "our agent learns" into a chart anyone can check.
+5. **Keep the LLM on a short leash.** One JSON-only call to read the message, no tool calling, and a rule-based fallback. Memory decisions should be correct every time, not agentic.
+
+If you want the concepts behind this, Vectorize's explainer on [what agent memory is](https://vectorize.io/what-is-agent-memory) is a good start, and the [Hindsight docs](https://hindsight.vectorize.io/) cover retain, recall, reflect, observations and mental models in depth. Munshi's code, including the replay harness, is on GitHub: [github.com/saibharath954/pakka](https://github.com/saibharath954/pakka).
+
+The veteran clerk still matters. Now what they know doesn't leave when they do.

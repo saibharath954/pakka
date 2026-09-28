@@ -1,18 +1,17 @@
-# Thumbnail prompt (Prompt 6), for Google Nano Banana (Gemini image)
+# Thumbnail prompt (for Google Nano Banana / Gemini image)
 
-Attach 1–2 photos of team members. Then paste:
+Attach 1–2 photos of team members, then paste:
 
 ---
-Generate a viral YouTube thumbnail, 16:9 aspect ratio, 1280x720.
-Left third: the attached person, cropped chest-up, surprised-but-pleased expression, looking toward the right, strong rim light.
-Right two-thirds: two stylised phone WhatsApp chat bubbles side by side.
-The left bubble is tinted red, crossed out, and reads "10% DISCOUNT!!".
-The right bubble is tinted green, with a check mark, and reads "RWA template attached".
-Between them a bold glowing orange arrow labelled "MEMORY".
-Top-right, big bold white text with black outline: "IT LEARNED".
-Small orange rounded logo tile with the letter "P" in the bottom-right corner.
-Background: dark charcoal with a subtle Hyderabad skyline silhouette and faint solar panels.
-High contrast, clean, very readable on a phone at small size, no other text, no watermarks.
+Generate a viral YouTube thumbnail, 16:9, 1280x720.
+Left third: the attached person, chest-up, raised-eyebrow "wait, what?" expression, looking right, warm rim light.
+Right two-thirds: two WhatsApp chat bubbles stacked. Both say "blue wala 2 cartoon".
+The top bubble has an arrow to a blue Surf Excel detergent pack; the bottom bubble has an arrow to a blue Lay's chips packet.
+Between the bubbles, a glowing teal-green label "MEMORY".
+Big bold white text with a dark outline across the top: "SAME WORDS. DIFFERENT ORDER."
+Small teal rounded logo tile with three white lines and a gold dot in the bottom-right corner.
+Background: dark charcoal with a faint warehouse of cartons and a subtle Hyderabad skyline.
+High contrast, readable on a phone, no other text, no watermarks.
 
-Video script summary: an AI sales follow-up agent for a Hyderabad solar installer. Without memory it sends discount spam. With Hindsight memory it recalls past leads, learns that apartment buyers need their residents' association approval first, and writes a better message citing its memories.
+Video summary: an AI order desk for Indian distributors. Two kirana shops use the same slang for different products; with Hindsight memory the agent learns each shop's meaning and goes from 31% to 98% of order lines automated with zero wrong orders.
 ---

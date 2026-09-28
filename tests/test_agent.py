@@ -1,129 +1,117 @@
 import asyncio
 from datetime import datetime
 
-import pytest
 from fastapi.testclient import TestClient
 
-from pakka.agent import IST, Pakka
-from pakka.app import create_app
-from pakka.config import Settings
-from pakka.crm import CRM
-from pakka.llm import TemplateLLM, extract_json
-from pakka.memory import LocalMemory
-from pakka.seed_data import EVENTS, LEADS
+from munshi.agent import IST, Munshi
+from munshi.app import create_app
+from munshi.config import Settings
+from munshi.evaluate import learning_curve
+from munshi.memory import LocalMemory
+from munshi.seed_data import LIVE_MESSAGES
 
 NOW = datetime(2026, 9, 28, 12, 0, tzinfo=IST)
 
 
-class RecordingLLM(TemplateLLM):
-    def __init__(self):
-        self.prompts = []
+def agent():
+    return Munshi(LocalMemory(), None, "Sri Venkateswara Agencies", clock=lambda: NOW)
+
+
+def test_learning_curve_rises_and_never_auto_accepts_wrong_lines():
+    a = agent()
+    r = asyncio.run(learning_curve(a, NOW, "offline"))
+    with_mem = [w["auto_rate"] for w in r["with_memory"]]
+    without = [w["auto_rate"] for w in r["without_memory"]]
+    assert with_mem[-1] >= 0.9 and with_mem[-1] > with_mem[0] + 0.5
+    assert max(without) < 0.4
+    assert r["totals"]["with_memory"]["auto_wrong"] == 0
+    assert r["totals"]["without_memory"]["auto_wrong"] > 0
+
+
+def test_same_nickname_means_different_products_for_different_shops():
+    a = agent()
+    asyncio.run(learning_curve(a, NOW, "offline"))
+    sharma = asyncio.run(a.process("R01", "blue wala 1 cartoon"))["lines"][0]
+    sairam = asyncio.run(a.process("R06", "blue wala 1 box"))["lines"][0]
+    assert (sharma["sku"], sharma["status"]) == ("SURF-EW-1K", "auto")
+    assert (sairam["sku"], sairam["status"]) == ("LAYS-MM-52", "auto")
+
+
+def test_usual_list_is_rebuilt_from_the_last_order():
+    a = agent()
+    asyncio.run(learning_curve(a, NOW, "offline"))
+    p = asyncio.run(a.process("R05", LIVE_MESSAGES[3][1]))
+    assert p["repeat"] and sum(1 for x in p["lines"] if x["basis"] == "repeat") >= 3
+    off = asyncio.run(a.process("R05", LIVE_MESSAGES[3][1], use_memory=False))
+    assert off["lines"][0]["status"] == "unknown"
+
+
+def test_confirm_retains_order_and_corrections():
+    a = agent()
+    final = [{"phrase": "blue wala", "sku": "SURF-EW-1K", "units": 24, "basis": "none", "suggested": None},
+             {"phrase": "surf", "sku": "SURF-QW-1K", "units": 12, "basis": "guess", "suggested": "SURF-EW-1K"},
+             {"phrase": "tata salt", "sku": "TATASALT-1K", "units": 25, "basis": "catalog", "suggested": "TATASALT-1K"}]
+    out = asyncio.run(a.confirm("R10", final, refresh=False))
+    kinds = [it["tags"] for it in a.memory.items]
+    assert any("kind:order" in t for t in kinds)
+    assert sum("kind:alias" in t for t in kinds) == 2  # catalog-exact line is not re-taught
+    assert any("kind:correction" in t for t in kinds)
+    assert "<VOUCHER VCHTYPE=\"Sales Order\"" in out["tally_xml"] and out["total"] > 0
+
+
+def test_api_end_to_end(tmp_path):
+    s = Settings("x", None, "test", "x", None, "x", True, "rules")
+    with TestClient(create_app(agent=agent(), settings=s, data_dir=tmp_path)) as c:
+        assert c.get("/").status_code == 200
+        inbox = c.get("/api/inbox").json()
+        assert len(inbox) == len(LIVE_MESSAGES)
+        c.post("/api/learning/run")
+        for _ in range(200):
+            if not c.get("/api/learning").json()["replay"]["running"]:
+                break
+            asyncio.run(asyncio.sleep(0.05))
+        curve = c.get("/api/learning").json()
+        assert curve["curve"]["mode"] == "offline" and not curve["sample"]
+        mid = next(m["id"] for m in inbox if m["retailer_id"] == "R01")
+        parsed = c.post(f"/api/inbox/{mid}/parse?memory=true").json()
+        assert all(x["status"] == "auto" for x in parsed["lines"])
+        lines = [{"phrase": x["phrase"], "sku": x["sku"], "units": x["units"], "basis": x["basis"]} for x in parsed["lines"]]
+        order = c.post(f"/api/inbox/{mid}/confirm", json={"lines": lines}).json()
+        assert c.get(f"/api/orders/{order['order_no']}.xml").status_code == 200
+        assert c.post(f"/api/inbox/{mid}/confirm", json={"lines": [{"sku": "NOPE", "units": 1}]}).status_code == 422
+        vocab = c.get("/api/retailers/R01").json()
+        assert any(v["phrase"] == "blue wala" and v["sku"] == "SURF-EW-1K" for v in vocab["vocabulary"])
+        assert c.get("/api/retailers/R99").status_code == 404
+        new = c.post("/api/inbox", json={"retailer_id": "R06", "text": "blue wala 1 box"}).json()
+        assert c.post(f"/api/inbox/{new['id']}/parse").json()["lines"][0]["sku"] == "LAYS-MM-52"
+        assert "answer" in c.post("/api/ask", json={"question": "what does blue wala mean?"}).json()
+
+
+class FakeLLM:
+    def __init__(self, reply):
+        self.reply, self.prompts = reply, []
 
     async def json(self, system, user):
         self.prompts.append(user)
-        return await super().json(system, user)
+        if isinstance(self.reply, Exception):
+            raise self.reply
+        return self.reply
 
 
-def make_agent():
-    return Pakka(LocalMemory(), RecordingLLM(), CRM(None), "SunKiran Solar", "Hyderabad", clock=lambda: NOW)
+def test_llm_parse_feeds_the_same_evidence_gate():
+    llm = FakeLLM({"lines": [{"phrase": "Blue Wala", "qty": 2, "unit": "case", "sku_guess": "SURF-QW-1K"},
+                             {"phrase": "tata salt", "qty": 1, "unit": "cartoon", "sku_guess": None}]})
+    a = Munshi(LocalMemory(), llm, "x", clock=lambda: NOW)
+    p = asyncio.run(a.process("R01", "blue wala 2 cartoon, tata salt 1 cartoon", use_memory=False))
+    assert p["parser"] == "llm"
+    blue, salt = p["lines"]
+    # The LLM's guess is only a suggestion: with no evidence it must go to the operator.
+    assert (blue["sku"], blue["status"]) == ("SURF-QW-1K", "review")
+    assert (salt["sku"], salt["units"], salt["status"]) == ("TATASALT-1K", 25, "auto")
+    assert "CATALOGUE" in llm.prompts[0]
 
 
-def run(coro):
-    return asyncio.run(coro)
-
-
-def test_seed_data_is_consistent():
-    ids = {lead.id for lead in LEADS}
-    assert all(e.lead_id in ids for e in EVENTS)
-    assert all(e.day <= 0 for e in EVENTS)
-    for e in EVENTS:
-        if e.kind == "outcome":
-            assert e.approach and e.result in {"replied", "ignored", "stalled", "converted", "lost"}
-
-
-def test_replay_retains_everything_with_lead_and_kind_tags():
-    agent = make_agent()
-    out = run(agent.replay(until_day=0))
-    assert out["retained"] == len(EVENTS)
-    items = agent.memory.items
-    assert all(any(t.startswith("lead:") for t in it["tags"]) for it in items)
-    assert sum("kind:outcome" in it["tags"] for it in items) == sum(e.kind == "outcome" for e in EVENTS)
-    # Outcomes drive CRM status; nothing is hard-coded.
-    assert agent.crm.get("L01")["status"] == "won"
-    assert agent.crm.get("L04")["status"] == "lost"
-    assert agent.crm.get("L12")["status"] == "open"
-
-
-def test_staged_replay_does_not_duplicate():
-    agent = make_agent()
-    first = run(agent.replay(until_day=-40))["retained"]
-    second = run(agent.replay(since_day=-40, until_day=0))["retained"]
-    assert first + second == len(EVENTS)
-    assert len(agent.memory.items) == len(EVENTS)
-
-
-def test_lead_recall_is_scoped_to_that_lead():
-    agent = make_agent()
-    run(agent.replay())
-    mems = run(agent.memory.recall("subsidy", tags=["lead:L11"]))
-    assert mems and all("lead:L11" in m.tags for m in mems)
-
-
-def test_draft_without_memory_sees_only_crm_row_and_last_message():
-    agent = make_agent()
-    run(agent.replay())
-    r = run(agent.draft("L12", use_memory=False))
-    prompt = agent.llm.prompts[-1]
-    assert r["memories"] == [] and not r["playbook_used"]
-    assert "[M1]" not in prompt and "[P1]" not in prompt
-    assert "LATEST MESSAGE FROM LEAD" in prompt
-    assert r["draft"]["approach"] == "discount"
-
-
-def test_draft_with_memory_injects_lead_history_and_similar_outcomes():
-    agent = make_agent()
-    run(agent.replay())
-    run(agent.memory.refresh_playbook())
-    r = run(agent.draft("L12", use_memory=True))
-    prompt = agent.llm.prompts[-1]
-    assert "[M1]" in prompt and "[P1]" in prompt
-    assert "TEAM PLAYBOOK" in prompt
-    refs = [m["ref"] for m in r["memories"]]
-    assert refs[0] == "M1" and any(ref.startswith("P") for ref in refs)
-    # Similar-lead outcomes must not repeat this lead's own memories.
-    lead_ids = {m["id"] for m in r["memories"] if m["ref"].startswith("M")}
-    assert not lead_ids & {m["id"] for m in r["memories"] if m["ref"].startswith("P")}
-
-
-def test_log_outcome_updates_status_and_tags():
-    agent = make_agent()
-    out = run(agent.log_outcome("L12", "rwa_noc_template_plus_society_presentation", "converted", "Signed 3kW."))
-    assert "approach:rwa_noc_template_plus_society_presentation" in out["tags"]
-    assert agent.crm.get("L12")["status"] == "won"
-
-
-def test_extract_json_tolerates_fences_and_chatter():
-    assert extract_json('```json\n{"a": 1}\n```') == {"a": 1}
-    assert extract_json('Sure! Here it is: {"a": {"b": 2}} hope that helps') == {"a": {"b": 2}}
-    with pytest.raises(Exception):
-        extract_json("no json here")
-
-
-def test_api_end_to_end_offline():
-    agent = make_agent()
-    settings = Settings.from_env().__class__(
-        hindsight_url="x", hindsight_api_key=None, bank_id="test", llm_base_url="x",
-        llm_api_key=None, llm_model="x", offline=True)
-    with TestClient(create_app(agent=agent, settings=settings)) as c:
-        assert c.get("/").status_code == 200
-        assert len(c.get("/api/leads").json()) == len(LEADS)
-        assert c.post("/api/replay", json={"reset": True, "until_day": 0}).json()["retained"] == len(EVENTS)
-        assert c.post("/api/leads/L12/interactions", json={"text": "Can you come Sunday?"}).status_code == 200
-        assert c.post("/api/leads/L12/outcomes", json={"approach": "x_y", "result": "bogus"}).status_code == 422
-        assert c.get("/api/leads/L99/brief").status_code == 404
-        d = c.post("/api/leads/L12/draft?memory=true").json()
-        assert d["draft"]["message"] and d["memories"]
-        assert "answer" in c.post("/api/ask", json={"question": "Why do apartment leads go cold?"}).json()
-        assert "items" in c.get("/api/due").json()
-        new = c.post("/api/leads", json={"name": "Test Lead", "segment": "commercial", "locality": "Ameerpet"}).json()
-        assert new["id"] == "L14"
+def test_llm_failure_falls_back_to_rules():
+    a = Munshi(LocalMemory(), FakeLLM(RuntimeError("bad json")), "x", clock=lambda: NOW)
+    p = asyncio.run(a.process("R01", "tata salt 1 cartoon", use_memory=False))
+    assert p["parser"] == "rules (fallback)" and p["lines"][0]["sku"] == "TATASALT-1K"

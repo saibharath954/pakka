@@ -1,16 +1,17 @@
 # Reddit link post
 
-Subreddit: r/LLMDevs (best fit for a technical memory write-up). Alternatives: r/AIAgents, r/AIMemory, r/SideProject.
-Type: **Link post** → article URL.
+Subreddit: **r/LLMDevs** (best technical fit). Alternatives: r/AIAgents, r/AIMemory, r/SideProject.
+Type: **Link post** → the article URL.
 
-**Title:**
-I gave my WhatsApp sales agent Hindsight memory. It stopped discounting.
+**Title:** "Blue wala" means Surf to one shop, chips to another: measuring an agent that learns customer slang
 
-**Optional first comment (context, not promo):**
-Built this for how Indian SMBs actually sell (IndiaMART leads, WhatsApp threads, RWA approvals, the PM Surya Ghar subsidy). A few things that might be useful if you're adding memory to an agent:
-- one Hindsight bank + tags per lead, with `tags_match="any_strict"` so untagged memories don't leak into lead-scoped recall
-- retain *outcomes* ("approach → replied/ignored"), not just chats, or the agent never learns what works
-- a mental model with `refresh_after_consolidation` is the "playbook", so there are no hand-written rules in the prompt
-- no function calling: plain-Python orchestration + a JSON-only LLM call was far more reliable on open models
+**First comment (context, not promo):**
 
-Code: [REPO LINK]. Happy to answer questions about the tag scoping or the baseline comparison.
+Built an order-desk agent for Indian FMCG distributors who take orders over WhatsApp. The interesting bits, if you're adding memory to an agent:
+
+- One Hindsight bank + strict tag matching per customer (`any_strict` / `all_strict`), so the same nickname can mean different SKUs for different shops.
+- The LLM only parses the message. A nickname auto-accepts only after 2 independent confirmations, counted from the raw retained chunks (`include_chunks=True`), not from paraphrased facts.
+- "Same as last time" uses recall with a `temporal_window`.
+- A replay harness scores 96 messages against gold labels, with memory on and off: 31% → 98% of lines auto-accepted, 0 wrong auto-accepts vs 9 without memory (bundled offline run; the script reproduces it against live Hindsight).
+
+Repo: https://github.com/saibharath954/pakka. Happy to answer questions about the gate or the eval.

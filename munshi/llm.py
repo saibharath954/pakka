@@ -1,6 +1,6 @@
 """Thin JSON-only chat wrapper over any OpenAI-compatible endpoint (Groq by default).
 
-Pakka deliberately does not use function calling. The orchestration (what to
+Munshi deliberately does not use function calling. The orchestration (what to
 recall, when to retain) is plain Python, and the model is asked for one JSON
 object. Open-weight models on fast inference providers are much more reliable
 at "return this JSON" than at multi-step tool use, and a failed parse is easy
@@ -56,35 +56,3 @@ class OpenAICompatLLM:
                 last_err = err
                 await asyncio.sleep(0.5 * (attempt + 1))
         raise RuntimeError(f"LLM did not return valid JSON after 3 attempts: {last_err}")
-
-
-class TemplateLLM:
-    """Deterministic stand-in: builds a draft from whatever context it was given.
-
-    Used by tests and PAKKA_OFFLINE=1. It is intentionally dumb: it only proves the
-    memory context reaches the prompt.
-    """
-
-    async def json(self, system: str, user: str) -> dict[str, Any]:
-        cited = re.findall(r"\[(M\d+|P\d+)\]", user)
-        has_memory = bool(cited)
-        name = re.search(r"Name: (.+)", user)
-        who = name.group(1).split(" (")[0] if name else "there"
-        if has_memory:
-            return {
-                "message": f"Hi {who}, following up with the details you asked for. (grounded in {len(set(cited))} memories)",
-                "language": "English",
-                "approach": "memory_grounded",
-                "send_at": "today 8pm",
-                "reasoning": [f"Based on [{c}]" for c in sorted(set(cited))[:4]],
-                "avoid": [],
-            }
-        return {
-            "message": f"Hi {who}, thanks for your interest in rooftop solar! We have a special discount this week. "
-                       "3kW starts at Rs 1.9 lakh. Shall I send the quotation?",
-            "language": "English",
-            "approach": "discount",
-            "send_at": "now",
-            "reasoning": ["No history available; using a standard offer."],
-            "avoid": [],
-        }

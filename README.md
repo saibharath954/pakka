@@ -1,117 +1,133 @@
-# Pakka: sales follow-ups that remember every lead and learn what closes
+# Munshi: the WhatsApp order desk that learns every shop's language
 
-> *pakka* (Hindi/Telugu slang): confirmed, for sure. As in "deal pakka".
+> *munshi* (Hindi/Urdu): the clerk who keeps the ledger.
 
-Indian small businesses sell over WhatsApp. A rooftop-solar installer in Hyderabad might have 3 reps, 150 open leads from IndiaMART and JustDial, and the entire sales history living in scattered chat threads. Who promised to call whom after Dasara? Which flat owner is blocked on their residents' association? Did the subsidy-proof message or the discount work better on independent-house owners? Nobody remembers, so every follow-up is generic ("special discount this week!"), and warm leads go cold.
+Kirana stores in Hyderabad don't send purchase orders. They send WhatsApp messages like this:
 
-**Pakka is a follow-up agent whose memory is [Hindsight](https://github.com/vectorize-io/hindsight).** Every conversation and every outcome is *retained*. Before each follow-up it *recalls* this lead's history plus what happened with similar leads. A Hindsight *mental model* keeps rewriting the team's playbook of what actually closes, as new outcomes come in.
+```
+Bhai order likho
+blue wala 2 cartoon
+tel 1 cartoon
+chota parle 1 cartoon
+shaam tak chahiye
+```
 
-<!-- TODO before submitting: add a screenshot from a live run as docs/ui.png and restore this line: ![Pakka UI](docs/ui.png) -->
+At the distributor, one order-desk veteran knows that for **Sharma Kirana**, "blue wala" means *Surf Excel Easy Wash 1kg*, "tel" means *Freedom sunflower oil 1L pouches*, and "cartoon" means a case of 12. For **Sai Ram Kirana**, three kilometres away, "blue wala" means *Lay's Magic Masala*. When that person is on leave, orders go wrong.
 
-## The before/after in one lead
+**Munshi turns those messages into Tally sales orders, and learns each shop's vocabulary from the operator's corrections.** Its memory is [Hindsight](https://github.com/vectorize-io/hindsight). There are no alias tables in this codebase. Everything Munshi knows about a shop, it learned.
 
-Suresh Varma, an apartment owner in Nallagandla, asks on IndiaMART: *"What is price for 3kW? Is subsidy there for flats? Please send quotation fast, comparing 3 vendors."*
+![Inbox with memory on](docs/inbox-memory-on.png)
 
-| | Without memory (stateless LLM) | With Hindsight memory |
+## The result, measured
+
+Eight weeks of orders (96 messages, 417 order lines, 10 shops) are replayed in date order. Each week Munshi sees only what it has learned so far. The same messages are also run with memory switched off: same parser, same item master, same safety gate.
+
+| | Week 1 | Week 4 | Week 8 | Wrong auto-accepts (8 weeks) |
+|---|---|---|---|---|
+| **With Hindsight memory** | 31% of lines auto-accepted | 82% | **98%** | **0** |
+| Without memory | 31% | 7% | 23% | 9 |
+
+![Learning curve](docs/learning-curve.png)
+
+These numbers come from the bundled offline run (`docs/learning_curve.sample.json`, which uses the keyword stand-in for memory so it can run anywhere). Run `python scripts/replay.py` with your Hindsight key to produce the same curve against a live Hindsight bank. The UI shows whichever run is newest, and labels which one it is.
+
+**Why "wrong auto-accepts" matters more than the rate.** One wrong order to a kirana store costs more than ten slow ones. Without memory, the agent auto-accepted 9 wrong lines, all on "same as last time, plus … extra" orders: it posted only the extra line, because the usual order lives in the shop's history. Munshi only auto-accepts a shop's nickname after the operator has confirmed it **twice** (the *evidence gate*), so it never auto-accepted a wrong line.
+
+## Before / after on one message
+
+| Sai Ram Kirana: "blue wala 2 box, green wala 1 box, kurkure 1 box" | Memory off | Memory on |
 |---|---|---|
-| Sees | CRM row + his last message | + everything about Suresh, + outcomes of similar leads, + learned playbook |
-| Drafts | Price per watt and a discount, sent now | No price before survey. RWA NOC template + offer to present at his society meeting. Group-housing subsidy for the common area |
-| Why | Nothing to go on | Quoting first made Neha Kapoor ghost and stalled Rahul Mehta for 2 weeks. The RWA template got Priya Nair's society to approve in 3 weeks |
+| blue wala | ✕ unknown | ✓ Lay's Magic Masala 52g, 2 cases (confirmed 5× for this shop) |
+| green wala | ✕ unknown | ? Lay's Cream & Onion: *seen once, check it* |
+| kurkure | ? best guess | ✓ Kurkure Masala Munch 90g (confirmed 8×) |
 
-The draft cites the memory ids it relied on, and the UI shows those memories, so a rep can check *why* the agent chose this angle.
+![Same message, memory off](docs/inbox-memory-off.png)
+
+"Same as last time" and "usual list pampandi" are rebuilt from the shop's most recent confirmed order, recalled from Hindsight inside a 35-day time window. With memory off, they are simply unknown.
 
 ## How Hindsight is used
 
-| Hindsight feature | Where in Pakka | Why it matters |
+| What you see | Hindsight feature | Code |
 |---|---|---|
-| **Bank** (`sunkiran-solar`) with `retain_mission` + `reflect_mission` | [`memory.py`](pakka/memory.py) `setup()` | One brain per company. The retain mission tells extraction to pull out objections, decision makers, and callback dates, and to resolve "after 2 weeks" into an absolute date |
-| **retain** with tags `lead:*`, `segment:*`, `kind:interaction/outcome`, `approach:*`, `result:*` and real timestamps | [`agent.py`](pakka/agent.py) `log_interaction`, `log_outcome`, `replay` | Tags let one bank serve both *"everything about this lead"* and *"what worked across all apartment leads"* |
-| **recall** with `tags_match="any_strict"` | `Pakka.draft` | Two recalls in parallel: this lead's memories (strictly scoped, no cross-lead leakage), and outcome memories from similar leads |
-| **reflect** (lead-scoped) | `Pakka.brief` | A 120-word pre-call brief: who decides, objections, promises, what we tried |
-| **reflect** + `response_schema` | `Pakka.due` | "Who did we promise to call, and when?" returned as structured JSON for the *Due now* panel |
-| **Mental model** `sales-playbook`, `refresh_after_consolidation=True` | `memory.py` `setup()`, playbook panel | A standing answer to *"which approaches work for which segment and objection?"*. Hindsight rewrites it in the background whenever new outcomes consolidate into observations. Reading it is a DB read, not an LLM call |
-| **Observations** (automatic consolidation) | on by default | Several apartment leads stalling on RWA approval become one evidence-backed belief instead of scattered facts |
+| Every confirmed order teaches Munshi: one fact per order, plus one *"Sharma Kirana (R01) wrote "blue wala" and it meant SURF-EW-1K"* fact per nickname line. Operator corrections are retained too | **retain** (batched), tags `retailer:R01`, `kind:order` / `kind:alias` / `kind:correction`, real timestamps | `agent.py` `confirm_items` |
+| A message is read against **that shop's** memory only. "blue wala" means different products for different shops, with no leakage | **recall** with `tags_match="all_strict"` / `"any_strict"` | `agent.py` `process` |
+| The evidence gate counts distinct confirmations from the **raw retained text**, not from paraphrased facts | recall with `include_chunks=True`; confirmations deduplicated by `document_id` | `parser.py` `alias_evidence` |
+| "Same as last time" → the last confirmed order | recall with `temporal_window` (last 35 days) + `query_timestamp` | `agent.py` `process` |
+| A per-shop **ordering dictionary** that rewrites itself as orders come in | **mental model** per retailer, tag-scoped, `refresh_after_consolidation=True` | `memory.py` `ensure_dictionary` |
+| "blue wala = SURF-EW-1K for R01, confirmed 3 times" as one belief, not three loose facts | **observations** (automatic consolidation, with a custom `observations_mission`) | `memory.py` `setup` |
+| *Ask Munshi*: "Who is overdue for their usual order?" returns structured insight cards | **reflect** with `response_schema` | `agent.py` `insights` |
+| The bank is told what to extract: phrases in quotes, SKU codes and retailer ids verbatim | bank `retain_mission`, `reflect_mission` | `memory.py` |
 
-What Pakka does **not** keep in Hindsight: the CRM row (name, phone, segment, status) lives in a small JSON store ([`crm.py`](pakka/crm.py)). Anything *learned* lives in Hindsight.
+![Architecture](docs/architecture.png)
 
-```mermaid
-flowchart LR
-  Rep[Sales rep<br/>web UI] -->|paste chat / log outcome| API[FastAPI<br/>pakka/app.py]
-  API --> Agent[Pakka agent<br/>pakka/agent.py]
-  Agent -->|retain: tagged, timestamped| H[(Hindsight bank<br/>sunkiran-solar)]
-  Agent -->|recall: lead-scoped + similar outcomes| H
-  Agent -->|reflect: brief, due list| H
-  H -->|consolidates observations<br/>refreshes mental model| PB[Sales playbook<br/>mental model]
-  PB --> Agent
-  Agent -->|JSON-only prompt + memory ids| LLM[Groq<br/>gpt-oss-120b]
-  LLM -->|draft + cited memories| Rep
-```
+## Design decisions
 
-### Design decisions worth knowing
-
-- **No function calling.** The orchestration (what to recall, when to retain) is plain Python. The LLM gets one prompt and returns one JSON object. On Groq-hosted open models this is far more reliable than tool loops, and a bad parse is retried. See [`llm.py`](pakka/llm.py).
-- **The "without memory" baseline is fair.** It still sees the CRM row and the message it is replying to, which is what a normal WhatsApp bot sees. The only difference is Hindsight.
-- **History is dated relative to today**, so the 8-week seed story always looks current, and temporal recall ("call me after 2 weeks") behaves correctly.
+- **The LLM reads; evidence decides.** The LLM (Groq `gpt-oss-120b`) only splits a messy message into *(phrase, qty, unit)* lines. Whether a line is safe to post is decided in plain Python from evidence: confirmations recalled from Hindsight, or an unambiguous item-master match. An LLM guess never auto-accepts.
+- **No function calling.** Retrieval and retention are deterministic orchestration around one JSON-only LLM call. If the model returns bad JSON or the provider errors, Munshi falls back to a rule parser instead of failing the order (`agent.py` `_raw_lines`).
+- **Tally stays the system of record.** Every confirmed order produces a Tally-importable Sales Order voucher (`tally.py`). Munshi does not post into Tally directly, because every on-premise Tally is configured differently.
+- **Operational state is not memory.** Today's inbox is a JSON file. Everything *learned* lives in Hindsight.
 
 ## Run it
 
-Requires Python 3.10+.
+Needs Python 3.10+.
 
 ```bash
-git clone <this repo> && cd pakka
+git clone https://github.com/saibharath954/pakka munshi && cd munshi
 python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env    # then fill in the two keys below
+cp .env.example .env
 ```
 
-1. **Hindsight**: easiest is [Hindsight Cloud](https://ui.hindsight.vectorize.io). Create an account, add credits in Billing, and create an API key. Put it in `HINDSIGHT_API_KEY`. Self-hosting instead? `docker compose up hindsight` (read the note in `docker-compose.yml`: Groq's *free* tier is too small for Hindsight's own extraction calls) and set `HINDSIGHT_URL=http://localhost:8888`.
-2. **LLM for drafting**: a [Groq](https://console.groq.com) key in `LLM_API_KEY`. Any OpenAI-compatible endpoint works via `LLM_BASE_URL` / `LLM_MODEL`.
+In `.env`, set:
+
+- `HINDSIGHT_API_KEY`: from [Hindsight Cloud](https://ui.hindsight.vectorize.io) (add promo credits under Billing). Self-hosting? Run the [Docker image](https://github.com/vectorize-io/hindsight#1-start-a-server) and set `HINDSIGHT_URL=http://localhost:8888`.
+- `LLM_API_KEY`: a [Groq](https://console.groq.com) key. Any OpenAI-compatible endpoint works via `LLM_BASE_URL` and `LLM_MODEL`. With no key, Munshi uses the rule parser.
 
 ```bash
-python scripts/smoke.py                 # checks both keys end to end
-python scripts/seed.py --reset          # loads 8 weeks of sales history (40 events) into Hindsight
-uvicorn pakka.app:app --reload          # open http://localhost:8000
+python scripts/smoke.py        # checks both keys
+python scripts/replay.py       # teaches the bank 8 weeks of orders and measures the curve (several minutes)
+uvicorn munshi.app:app         # http://localhost:8000
 ```
 
-Seeding takes a minute or two (Hindsight extracts facts from every event). The playbook mental model fills in shortly after, once consolidation runs. Click **Refresh** on the playbook panel if you're impatient.
+### Three-minute demo
 
-### Demo flow (3 minutes)
-
-1. **Learning curve.** *History → Reset → load weeks 1–2 only*. The playbook is thin: a couple of failed discounts. Then *History → Load the remaining weeks*. The playbook now has segment-by-segment rules with evidence.
-2. **Before/after.** Select **Suresh Varma** → *Draft: without vs with memory*. Left: price + discount. Right: RWA template, no premature quote, cites Neha, Rahul and Priya.
-3. **Language + family.** Select **Padma Reddy** → draft with memory. It comes out in Telugu, suggests looping in her daughter, and leads with subsidy proof. That's what worked for Lakshmi Devi, who referred her.
-4. **Promises.** *Due now → Check memory*: Mohammed Irfan's "call after 6pm today" and Rahul Mehta's post-vote Monday follow-up. Kiran Kumar was lost because nobody called when promised.
-5. **Teach it live.** On Suresh, *Retain an outcome*: `rwa_noc_template_plus_society_presentation` / `replied`. The playbook refresh is queued. Ask the memory: *"Why do apartment leads go cold?"*
+1. **Inbox → Sai Ram Kirana.** "blue wala" resolves to Lay's, with evidence dots. Press **M** (or the *Memory* switch): everything turns red. Press **M** again.
+2. **Sharma Kirana.** The same "blue wala" is Surf Excel here. Confirm with **⌘/Ctrl + ↵**: the card shows exactly which facts were retained to Hindsight, plus a Tally XML download.
+3. **Venkat Provisions.** A voice-note transcript saying "usual list": rebuilt from last week's order.
+4. **+ New**: type *"green wala 1 box"* for Sai Ram Kirana. It is seen once, so it goes to review. Confirm it, send it again, and it auto-accepts.
+5. **Learning curve** tab: the chart above. **Ask Munshi**: *"What does blue wala mean for each shop?"*
 
 ### Offline mode and tests
 
-`PAKKA_OFFLINE=1` swaps Hindsight for a keyword-matching stand-in and the LLM for a template. It is only for tests and UI work. It does **not** show what Hindsight does.
+`MUNSHI_OFFLINE=1` swaps Hindsight for an in-process keyword stand-in. It is for tests and UI work only, and the UI labels it.
 
 ```bash
 pip install -r requirements-dev.txt
-pytest -q
+pytest -q          # 16 tests, including a wire-contract test of the Hindsight client
+ruff check munshi tests scripts
 ```
-
-The suite includes a contract test that drives the real `hindsight-client` against a stub HTTP server. It checks that tags, strict tag matching, timestamps, the mental-model trigger and the reflect response schema go over the wire as intended.
 
 ## Project layout
 
 ```
-pakka/
-  agent.py       orchestration: retain / recall / reflect, prompt assembly, history replay
-  memory.py      HindsightMemory (real) + LocalMemory (tests)
-  llm.py         JSON-only OpenAI-compatible client (Groq default) with retries
-  crm.py         plain lead rows (not knowledge)
-  seed_data.py   8 weeks of realistic sales history for a Hyderabad solar installer
-  app.py         FastAPI + static UI
-  static/        index.html, app.js, style.css (no build step)
-scripts/         seed.py, smoke.py
-tests/           unit + API + Hindsight contract tests
+munshi/
+  agent.py      recall → parse → evidence gate → confirm → retain
+  parser.py     rule parser, evidence counting from recalled memories, the gate
+  memory.py     HindsightMemory (bank, recall, reflect, mental models) + LocalMemory stand-in
+  evaluate.py   8-week replay with/without memory, metrics
+  seed_data.py  10 Hyderabad kirana stores with their own vocabularies; deterministic order generator with gold labels
+  catalog.py    item master (48 FMCG SKUs, case sizes, dealer prices)
+  tally.py      Tally Sales Order XML
+  app.py        FastAPI API; static/ is the UI (no build step)
+scripts/        replay.py, smoke.py
+tests/          parser, agent, API, Hindsight contract
 ```
 
-## Data
+## Data and honesty notes
 
-All leads, phone numbers and conversations are synthetic. They are modelled on how Hyderabad rooftop-solar sales actually run: IndiaMART/JustDial leads, the PM Surya Ghar subsidy, RWA approvals for apartments, and TGSPDCL net metering. Phone numbers are masked (`xxxxx`).
+- The retailers, messages and prices are synthetic. They are modelled on how Hyderabad FMCG distribution runs over WhatsApp: Hinglish, Telugu-English and Urdu-Hindi phrasing, "cartoon" and "peti" for cases, voice-note transcripts. Prices are rounded demo dealer prices.
+- The evaluation's "operator" is simulated: it confirms the gold order, exactly as a human would in the UI.
+- This is the order-desk half of the job. Stock checks, credit limits and WhatsApp Business API intake are the obvious next steps.
 
 ## Links
 
