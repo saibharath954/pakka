@@ -14,4 +14,4 @@ Built an order-desk agent for Indian FMCG distributors who take orders over What
 - "Same as last time" uses recall with a `temporal_window`.
 - A replay harness scores 96 messages against gold labels, with memory on and off: 31% → 98% of lines auto-accepted, 0 wrong auto-accepts vs 9 without memory (bundled offline run; the script reproduces it against live Hindsight).
 
-Repo: https://github.com/saibharath954/pakka. Happy to answer questions about the gate or the eval.
+Repo: https://github.com/saibharath954/Munshi. Happy to answer questions about the gate or the eval.

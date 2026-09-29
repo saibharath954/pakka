@@ -20,7 +20,7 @@ Replayed 8 weeks of orders:
 Lines auto-accepted: 31% → 98%
 Wrong auto-accepts: 0 (9 without memory)
 
-Code: https://github.com/saibharath954/pakka
+Code: https://github.com/saibharath954/Munshi
 
 #AIAgents #AgentMemory #Hindsight #LLM
 

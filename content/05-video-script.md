@@ -41,7 +41,7 @@
 
 ## Description
 Munshi: a WhatsApp order desk that learns every shop's language, built on Hindsight agent memory.
-Code: https://github.com/saibharath954/pakka
+Code: https://github.com/saibharath954/Munshi
 Article: [ARTICLE LINK]
 Hindsight: https://github.com/vectorize-io/hindsight
 Docs: https://hindsight.vectorize.io/

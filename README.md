@@ -72,7 +72,7 @@ These numbers come from the bundled offline run (`docs/learning_curve.sample.jso
 Needs Python 3.10+.
 
 ```bash
-git clone https://github.com/saibharath954/pakka munshi && cd munshi
+git clone https://github.com/saibharath954/Munshi munshi && cd munshi
 python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 cp .env.example .env

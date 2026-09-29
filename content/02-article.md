@@ -110,6 +110,6 @@ The before/after on a single message is the moment that makes the point in a dem
 4. **Measure the curve.** A replay with memory on and off, scored against gold labels, turns "our agent learns" into a chart anyone can check.
 5. **Keep the LLM on a short leash.** One JSON-only call to read the message, no tool calling, and a rule-based fallback. Memory decisions should be correct every time, not agentic.
 
-If you want the concepts behind this, Vectorize's explainer on [what agent memory is](https://vectorize.io/what-is-agent-memory) is a good start, and the [Hindsight docs](https://hindsight.vectorize.io/) cover retain, recall, reflect, observations and mental models in depth. Munshi's code, including the replay harness, is on GitHub: [github.com/saibharath954/pakka](https://github.com/saibharath954/pakka).
+If you want the concepts behind this, Vectorize's explainer on [what agent memory is](https://vectorize.io/what-is-agent-memory) is a good start, and the [Hindsight docs](https://hindsight.vectorize.io/) cover retain, recall, reflect, observations and mental models in depth. Munshi's code, including the replay harness, is on GitHub: [github.com/saibharath954/Munshi](https://github.com/saibharath954/Munshi).
 
 The veteran clerk still matters. Now what they know doesn't leave when they do.
